@@ -86,7 +86,7 @@ def test_head_tail_preview() -> None:
     preview = _head_tail_preview(text, head_lines=2, tail_lines=2)
     assert 'line 0' in preview
     assert 'line 19' in preview
-    assert 'lines truncated' in preview
+    assert 'lines omitted' in preview
     assert 'line 10' not in preview
 
 
@@ -117,8 +117,8 @@ async def test_wrap_tool_offloads_large_output_to_artifact(ctx: GenerateMiddlewa
     params = ToolHookParams(tool_request_part=ToolRequestPart(tool_request=tr), tool=tool)
 
     result = await mw.wrap_tool(params, ctx, next_fn)
-    assert 'read_artifact' in result.output
-    assert 'lines truncated' in result.output
+    assert 'output offloaded' in result.output
+    assert 'lines omitted' in result.output
     arts = await session.get_artifacts()
     assert len(arts) == 1
     assert arts[0].name.startswith('tool-output/execute/')
@@ -127,7 +127,7 @@ async def test_wrap_tool_offloads_large_output_to_artifact(ctx: GenerateMiddlewa
 @pytest.mark.asyncio
 async def test_summarization_replaces_prefix_and_logs_transcript(ctx: GenerateMiddlewareContext) -> None:
     async def fake_summarizer(messages, *, ctx):  # noqa: ANN001, ARG001
-        return '## SESSION INTENT\nFix auth test\n## SUMMARY\nRead auth.py and patched login.'
+        return '### Goal\nFix auth test\n### What happened\nRead auth.py and patched login.'
 
     mw = Compaction(
         summarizer=fake_summarizer,
@@ -154,6 +154,7 @@ async def test_summarization_replaces_prefix_and_logs_transcript(ctx: GenerateMi
     msgs = captured['messages']
     assert msgs[0].metadata.get('compaction-summary') is True
     assert 'conversation-history/sess-1.md' in msgs[0].content[0].root.text
+    assert '[context compressed]' in msgs[0].content[0].root.text
     assert 'Fix auth test' in msgs[0].content[0].root.text
     assert msgs[-1].content[0].root.text == 'latest'
     assert len(msgs) == 3  # summary + mid + recent (keep window retained mid)

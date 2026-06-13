@@ -4,38 +4,11 @@ Copy-paste middleware recipes for [Genkit](https://github.com/firebase/genkit) P
 
 ## Recipes
 
-### Compaction (`recipes/compaction/`)
+| Recipe | What it does |
+|--------|----------------|
+| [Compaction](recipes/compaction/) | Keeps long coding-agent runs inside the context window — clips old tool payloads, offloads fat tool output to artifacts, and optionally summarizes evicted history with a recoverable log. |
 
-Layered context compaction inspired by [Deep Agents](https://github.com/langchain-ai/deepagents) / Open SWE:
-
-1. **Structural** (cheap, no LLM): clip old `write_file` / `edit_file` arguments and truncate oversized tool outputs outside the keep window
-2. **Tool offload**: large tool results → session artifact + head/tail preview pointer (`read_artifact` to recover)
-3. **Summarization** (optional): at ~85% of context budget, append evicted transcript to a conversation log artifact, replace the prefix with an LLM summary + log pointer
-
-```python
-from recipes.compaction import Compaction
-from genkit.plugins.middleware import Artifacts, Filesystem
-
-async def summarize(messages, *, ctx):
-    # optional custom summarizer; otherwise set summary_model=
-    ...
-
-await ai.generate(
-    prompt='Fix the failing test in auth.py',
-    use=[
-        Filesystem(root_dir='./workspace'),
-        Artifacts(),
-        Compaction(
-            max_context_tokens=200_000,
-            trigger_fraction=0.85,
-            keep_fraction=0.10,
-            summary_model='googleai/gemini-2.0-flash',  # cheap model for summaries
-        ),
-    ],
-)
-```
-
-Or copy `recipes/compaction/compaction.py` into your project and import locally.
+Tell your favorite coding agent to open the recipe you want under `recipes/` and copy the `.py` file into your app. Each recipe has its own README with setup and config.
 
 ## Setup
 

@@ -66,20 +66,20 @@ _DEFAULT_BULK_INPUT_KEYS = frozenset(
 _TOOLS_EXCLUDED_FROM_OFFLOAD = frozenset({'read_file', 'write_file', 'edit_file', 'list_files'})
 
 _SUMMARY_PROMPT = """\
-<instructions>
-Extract the context needed to continue this coding-agent session without the full
-message history. Structure the result with these sections (use "None" when empty):
+Older turns from a coding-agent run are below. Produce a compact handoff note the
+agent can use to keep working without the raw transcript.
 
-## SESSION INTENT
-## SUMMARY
-## ARTIFACTS
-## NEXT STEPS
-</instructions>
+Use exactly these headings (write "none" for an empty section):
 
-Messages to summarize:
+### Goal
+### What happened
+### Paths and edits
+### Still to do
+
+Transcript:
 {messages}
 
-Respond ONLY with the structured summary.
+Return only the handoff note under those headings.
 """
 
 
@@ -200,7 +200,7 @@ def _head_tail_preview(
     head = '\n'.join(line[:1000] for line in lines[:head_lines])
     tail = '\n'.join(line[:1000] for line in lines[-tail_lines:])
     omitted = len(lines) - head_lines - tail_lines
-    return f'{head}\n... [{omitted} lines truncated] ...\n{tail}'
+    return f'{head}\n<<< {omitted} lines omitted >>>\n{tail}'
 
 
 def _truncate_tool_input(
@@ -262,7 +262,7 @@ def _format_transcript(messages: list[Message]) -> str:
         body = _message_text(msg).strip()
         if not body:
             continue
-        lines.append(f'{role}: {body}')
+        lines.append(f'[{role}] {body}')
     return '\n\n'.join(lines)
 
 
@@ -351,13 +351,13 @@ def _compact_prefix(
 def _build_summary_message(summary: str, log_path: str | None) -> Message:
     if log_path:
         text = (
-            'You are in the middle of a conversation that has been summarized.\n\n'
-            f'The full conversation history has been saved to artifact "{log_path}" '
-            'should you need to refer back to it for details.\n\n'
-            f'<summary>\n{summary}\n</summary>'
+            '[context compressed]\n'
+            'Older turns were dropped from the active window to free tokens.\n'
+            f'Verbatim archive: artifact `{log_path}` (read_artifact).\n\n'
+            f'--- handoff ---\n{summary}\n--- end handoff ---'
         )
     else:
-        text = f'Here is a summary of the conversation to date:\n\n{summary}'
+        text = f'[context compressed]\n\n--- handoff ---\n{summary}\n--- end handoff ---'
 
     return Message(
         role=Role.USER,
@@ -402,7 +402,7 @@ async def _append_conversation_log(
         return False
 
     timestamp = datetime.now(UTC).isoformat()
-    section = f'## Compacted at {timestamp}\n\n{_format_transcript(evicted)}\n\n'
+    section = f'--- archived turns ({timestamp}) ---\n\n{_format_transcript(evicted)}\n\n'
     existing = await _read_artifact_text(ctx, log_name)
     await ctx.session.add_artifacts(
         Artifact(
@@ -490,16 +490,18 @@ class Compaction(BaseMiddleware[CompactionConfig]):
 
         model_name = self.config.summary_model
         if not model_name:
+            snippet = _truncate_text(transcript, 2000, 500, self.config.truncation_suffix)
             return (
-                '## SESSION INTENT\n(automatic summary unavailable — no summary_model configured)\n\n'
-                f'## SUMMARY\n{_truncate_text(transcript, 2000, 500, self.config.truncation_suffix)}'
+                '### Goal\nunknown (no summary_model configured)\n\n'
+                f'### What happened\n{snippet}'
             )
 
         action = await ctx.registry.resolve_action(ActionKind.MODEL, model_name)
         if action is None:
+            snippet = _truncate_text(transcript, 2000, 500, self.config.truncation_suffix)
             return (
-                f'## SUMMARY\nSummary model {model_name!r} not found in registry.\n\n'
-                f'{_truncate_text(transcript, 2000, 500, self.config.truncation_suffix)}'
+                f'### Goal\nunknown (model {model_name!r} missing from registry)\n\n'
+                f'### What happened\n{snippet}'
             )
 
         prompt = _SUMMARY_PROMPT.format(messages=transcript)
@@ -547,9 +549,9 @@ class Compaction(BaseMiddleware[CompactionConfig]):
                 tail_lines=cfg.preview_tail_lines,
             )
             compact = (
-                f'Tool result too large; full output saved to artifact "{artifact_name}". '
-                f'Use read_artifact to retrieve (paginate if needed).\n\n'
-                f'Preview:\n{preview}'
+                f'[output offloaded] inline cap exceeded; full text in artifact `{artifact_name}`.\n'
+                f'Load with read_artifact — read in slices if it is long.\n\n'
+                f'--- sample ---\n{preview}\n--- end sample ---'
             )
             return MultipartToolResponse(
                 output=compact,

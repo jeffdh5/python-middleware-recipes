@@ -12,17 +12,10 @@ Tell your favorite coding agent to open the recipe you want under `recipes/` and
 
 ## Setup
 
-Requires Genkit Python with session artifacts (install from [firebase/genkit](https://github.com/firebase/genkit) `py/` tree — not all features are in the PyPI 0.7 build yet):
+Requires Genkit Python **0.8+** with session artifacts:
 
 ```bash
-pip install genkit genkit-plugin-middleware genkit-plugin-google-genai websockets
-```
-
-For development against a local Genkit checkout:
-
-```bash
-uv add --editable ../genkit-middleware/py/packages/genkit
-uv add --editable ../genkit-middleware/py/plugins/middleware
+pip install "genkit>=0.8" "genkit-plugin-middleware>=0.8" genkit-plugin-google-genai
 ```
 
 ## Tests

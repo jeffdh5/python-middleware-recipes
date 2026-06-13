@@ -7,7 +7,7 @@ import pytest
 import genkit._core._typing as genkit_typing
 
 if not hasattr(genkit_typing, 'Artifact'):
-    pytest.skip('requires genkit with session Artifact support', allow_module_level=True)
+    pytest.skip('requires genkit 0.8+ with session Artifact support', allow_module_level=True)
 
 from genkit import ModelRequest, ModelResponse
 from genkit._core._model import GenerateActionOptions, Message
